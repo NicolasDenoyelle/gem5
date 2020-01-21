@@ -254,6 +254,14 @@ PhysicalMemory::isMemAddr(Addr addr) const
     return addrMap.contains(addr) != addrMap.end();
 }
 
+int PhysicalMemory::NUMANodeIndex(const AbstractMemory &mem) const
+{
+    auto m = std::find(memories.begin(), memories.end(), &mem);
+    if (m == memories.end())
+        return -1;
+    return std::distance(memories.begin(), m);
+}
+
 AddrRangeList
 PhysicalMemory::getConfAddrRanges() const
 {

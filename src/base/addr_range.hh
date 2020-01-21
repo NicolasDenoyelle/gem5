@@ -94,6 +94,18 @@ class AddrRange
     AddrRange()
         : _start(1), _end(0), intlvMatch(0)
     {}
+    /** Copy constructor **/
+    AddrRange(const AddrRange &r)
+        : _start(r._start), _end(r._end), masks(r.masks),
+          intlvMatch(r.intlvMatch) {}
+
+    /** Copy constructor with custom start and end **/
+    AddrRange(const AddrRange r, const Addr start,
+              const size_t size)
+        : _start(start),
+          _end(((start >> r.masks.size()) + size)
+               << r.masks.size()),
+          masks(r.masks), intlvMatch(r.intlvMatch) {}
 
     /**
      * Construct an address range
@@ -364,6 +376,46 @@ class AddrRange
     }
 
     /**
+     * Extend Addr range size by appending another range if:
+     * * other range is the continuation of this range,
+     * * interleave bits are the sames.
+     * return true if appended.
+     **/
+    bool append(const AddrRange &r) {
+        if (r._start != _end || r.masks != masks)
+            return false;
+        _end = r._end;
+        return true;
+    }
+
+    /**
+     * Split a range at a specific address and store the
+     *resulting ranges in lhs and rhs.
+     **/
+    void splitAt(const Addr split, AddrRange &lhs,
+                 AddrRange &rhs) {
+        if (split < _start || split > _end)
+            fatal("Cannot split an AddrRange out of "
+                  "bounds\n");
+
+        lhs._start = _start;
+        rhs._end = _end;
+        lhs._end = split;
+        rhs._start = split;
+        lhs.masks = masks;
+        rhs.masks = masks;
+        lhs.intlvMatch = intlvMatch;
+        rhs.intlvMatch = intlvMatch;
+    }
+
+    void split(const size_t size, AddrRange &lhs,
+               AddrRange &rhs) {
+        splitAt(((_start >> masks.size()) + size)
+                    << masks.size(),
+                lhs, rhs);
+    }
+
+    /**
      * Determine if another range intersects this one, i.e. if there
      * is an address that is both in this range and the other
      * range. No check is made to ensure either range is valid.
@@ -403,9 +455,18 @@ class AddrRange
      * check is made to ensure either range is valid.
      *
      * @param r Range to compare with
+<<<<<<< HEAD
+<<<<<<< variant A
      * @return true if the this range is a subset of the other one
      *
      * @ingroup api_addr_range
+>>>>>>> variant B
+     * @return true if the this range is a subset of the
+     * other one
+======= end
+=======
+     * @return true if the this range is a subset of the other one
+>>>>>>> sim: revert commit changing original code formatting
      */
     bool isSubset(const AddrRange& r) const
     {

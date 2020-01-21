@@ -37,8 +37,10 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import m5.objects
+from m5.util import fatal
 from common import ObjectList
 from common import HMC
+import math
 
 def create_mem_intf(intf, r, i, nbr_mem_ctrls, intlv_bits, intlv_size,
                     xor_low_bit):
@@ -105,6 +107,47 @@ def create_mem_intf(intf, r, i, nbr_mem_ctrls, intlv_bits, intlv_size,
                                       intlvMatch = i)
     return interface
 
+def opt_mem_dict(opt_mem_type, options):
+    # Parse string as a python dict.
+    try:
+        d = eval(opt_mem_type)
+        if not isinstance(d, dict):
+            raise TypeError("Input memory must be a dictionary: "
+                            "{ 'type': <mem type> (, 'size': <mem size>,"
+                            "'channels': <num channels>, 'ranks': <num ranks>)"
+                            "}")
+        if 'type' not in d.keys():
+            raise ValueError("Input memory must be a dictionary: "
+                            "{ 'type': <mem type> (, 'size': <mem size>,"
+                            "'channels': <num channels>, 'ranks': <num ranks>)"
+                            "}")
+        if 'size' not in d.keys():
+            d['size'] = options.mem_size
+        if 'channels' not in d.keys():
+            d['channels'] = options.mem_channels
+        if 'ranks' not in d.keys():
+            d['ranks'] = options.mem_ranks
+    # If it does not work, assume input is a memory type.
+    except Exception:
+        d = {
+            'type': opt_mem_type,
+            'size': options.mem_size,
+            'channels': options.mem_channels,
+            'ranks': options.mem_ranks,
+        }
+
+    # Check fields type
+    if d['type'] not in ObjectList.mem_list.get_names():
+        raise ValueError("Invalid memory type: {}".format(d['type']))
+    if not isinstance(d['size'], str):
+        raise TypeError("Input ({!s}) memory size must be a string.".format(d))
+    if not isinstance(d['channels'], int):
+        raise TypeError("Input ({!s}) memory channels must be an "
+                        "int.".format(d))
+    if not isinstance(d['ranks'], int) and d['ranks'] is not None:
+        raise TypeError("Input ({!s}) memory ranks must be an int.".format(d))
+    return d
+
 def config_mem(options, system):
     """
     Create the memory controllers based on the options and attach them.
@@ -117,6 +160,9 @@ def config_mem(options, system):
     """
 
     # Mandatory options
+    opt_mem_types = [ opt_mem_dict(options.mem_type, options) ]
+    opt_mem_types += [ opt_mem_dict(t, options) for t in options.add_mem ]
+    opt_mem_type = options.mem_type
     opt_mem_channels = options.mem_channels
 
     # Semi-optional options
@@ -138,7 +184,16 @@ def config_mem(options, system):
     opt_mem_channels_intlv = getattr(options, "mem_channels_intlv", 128)
     opt_xor_low_bit = getattr(options, "xor_low_bit", 0)
 
-    if opt_mem_type == "HMC_2500_1x32":
+    # The default behaviour is to interleave memory channels on 128
+    # byte granularity, or cache line granularity if larger than 128
+    # byte. This value is based on the locality seen across a large
+    # range of workloads.
+    intlv_size = max(opt_mem_channels_intlv, system.cache_line_size.value)
+
+    if "HMC_2500_1x32" in opt_mem_types:
+        if any(t != "HMC_2500_1x32" for t in opt_mem_types):
+            fatal("System does not support different types of crossbar. "
+                  "(hmc_dev.xbar, system.membus)")
         HMChost = HMC.config_hmc_host_ctrl(options, system)
         HMC.config_hmc_dev(options, system, HMChost.hmc_host)
         subsystem = system.hmc_dev
@@ -164,80 +219,73 @@ def config_mem(options, system):
         subsystem.workload.addr_check = False
         return
 
-    nbr_mem_ctrls = opt_mem_channels
-
-    import math
-    from m5.util import fatal
-    intlv_bits = int(math.log(nbr_mem_ctrls, 2))
-    if 2 ** intlv_bits != nbr_mem_ctrls:
-        fatal("Number of memory channels must be a power of 2")
-
-    if opt_mem_type:
-        intf = ObjectList.mem_list.get(opt_mem_type)
     if opt_nvm_type:
         n_intf = ObjectList.mem_list.get(opt_nvm_type)
-
     nvm_intfs = []
+
+    range_iter = 0
     mem_ctrls = []
-
-    if opt_elastic_trace_en and not issubclass(intf, m5.objects.SimpleMemory):
-        fatal("When elastic trace is enabled, configure mem-type as "
-                "simple-mem.")
-
-    # The default behaviour is to interleave memory channels on 128
-    # byte granularity, or cache line granularity if larger than 128
-    # byte. This value is based on the locality seen across a large
-    # range of workloads.
-    intlv_size = max(opt_mem_channels_intlv, system.cache_line_size.value)
 
     # For every range (most systems will only have one), create an
     # array of memory interfaces and set their parameters to match
     # their address mapping in the case of a DRAM
-    range_iter = 0
-    for r in system.mem_ranges:
+    for mem, r in zip(opt_mem_types, system.mem_ranges):
         # As the loops iterates across ranges, assign them alternatively
         # to DRAM and NVM if both configured, starting with DRAM
         range_iter += 1
+
+        opt_mem_type = mem['type']
+        opt_mem_channels = mem['channels']
+        opt_mem_ranks = mem['ranks']
+        nbr_mem_ctrls = opt_mem_channels
+        intlv_bits = int(math.log(nbr_mem_ctrls, 2))
+        if 2 ** intlv_bits != nbr_mem_ctrls:
+            fatal("Number of memory channels must be a power of 2")
+        if opt_mem_type:
+            intf = ObjectList.mem_list.get(opt_mem_type)
+
+        if opt_elastic_trace_en and not issubclass(intf,
+                                                   m5.objects.SimpleMemory):
+            fatal("When elastic trace is enabled, configure mem-type as "
+                  "simple-mem.")
 
         for i in range(nbr_mem_ctrls):
             if opt_mem_type and (not opt_nvm_type or range_iter % 2 != 0):
                 # Create the DRAM interface
                 dram_intf = create_mem_intf(intf, r, i, nbr_mem_ctrls,
-                                    intlv_bits, intlv_size, opt_xor_low_bit)
+                                            intlv_bits, intlv_size,
+                                            opt_xor_low_bit)
+            # Set the number of ranks based on the command-line
+            # options if it was explicitly set
+            if issubclass(intf, m5.objects.DRAMInterface) and \
+               opt_mem_ranks:
+                dram_intf.ranks_per_channel = opt_mem_ranks
 
-                # Set the number of ranks based on the command-line
-                # options if it was explicitly set
-                if issubclass(intf, m5.objects.DRAMInterface) and \
-                   opt_mem_ranks:
-                    dram_intf.ranks_per_channel = opt_mem_ranks
+            # Enable low-power DRAM states if option is set
+            if issubclass(intf, m5.objects.DRAMInterface):
+                dram_intf.enable_dram_powerdown = opt_dram_powerdown
 
-                # Enable low-power DRAM states if option is set
-                if issubclass(intf, m5.objects.DRAMInterface):
-                    dram_intf.enable_dram_powerdown = opt_dram_powerdown
+            if opt_elastic_trace_en:
+                dram_intf.latency = '1ns'
+                print("For elastic trace, over-riding Simple Memory "
+                      "latency to 1ns.")
 
-                if opt_elastic_trace_en:
-                    dram_intf.latency = '1ns'
-                    print("For elastic trace, over-riding Simple Memory "
-                        "latency to 1ns.")
+            # Create the controller that will drive the interface
+            if opt_mem_type == "HMC_2500_1x32":
+                # The static latency of the vault controllers is estimated
+                # to be smaller than a full DRAM channel controller
+                mem_ctrl = m5.objects.MemCtrl(min_writes_per_switch = 8,
+                                              static_backend_latency = '4ns',
+                                              static_frontend_latency = '4ns')
+            elif opt_mem_type == "SimpleMemory":
+                mem_ctrl = m5.objects.SimpleMemory()
+            else:
+                mem_ctrl = m5.objects.MemCtrl()
 
-                # Create the controller that will drive the interface
-                if opt_mem_type == "HMC_2500_1x32":
-                    # The static latency of the vault controllers is estimated
-                    # to be smaller than a full DRAM channel controller
-                    mem_ctrl = m5.objects.MemCtrl(min_writes_per_switch = 8,
-                                             static_backend_latency = '4ns',
-                                             static_frontend_latency = '4ns')
-                elif opt_mem_type == "SimpleMemory":
-                    mem_ctrl = m5.objects.SimpleMemory()
-                else:
-                    mem_ctrl = m5.objects.MemCtrl()
-
-                # Hookup the controller to the interface and add to the list
-                if opt_mem_type != "SimpleMemory":
-                    mem_ctrl.dram = dram_intf
-
+            # Hookup the controller to the interface and add to the list
+            if opt_mem_type != "SimpleMemory":
+                mem_ctrl.dram = dram_intf
                 mem_ctrls.append(mem_ctrl)
-
             elif opt_nvm_type and (not opt_mem_type or range_iter % 2 == 0):
                 nvm_intf = create_mem_intf(n_intf, r, i, nbr_mem_ctrls,
                                            intlv_bits, intlv_size)
@@ -252,7 +300,6 @@ def config_mem(options, system):
                 if not opt_hybrid_channel:
                     mem_ctrl = m5.objects.MemCtrl()
                     mem_ctrl.nvm = nvm_intf
-
                     mem_ctrls.append(mem_ctrl)
                 else:
                     nvm_intfs.append(nvm_intf)

@@ -347,6 +347,84 @@ munmapFunc(SyscallDesc *desc, ThreadContext *tc, Addr start, size_t length)
     return 0;
 }
 
+ SyscallReturn
+ mbindFunc(SyscallDesc* desc, ThreadContext* tc,
+           Addr addr, uint64_t len, int mode,
+           Addr nodemask, uint64_t maxnode, int flags)
+ {
+    auto p = tc->getProcessPtr();
+    NUMA::MemPolicy sim_policy = NUMA::MemPolicy();
+
+    // mbind args
+    const size_t masksize = (maxnode / 8) + (maxnode % 8 ? 1 : 0);
+
+    if (maxnode > NUMA::MAXNUMANODES)
+        return -EINVAL;
+    tc->getVirtProxy().readBlob(nodemask, sim_policy.mask(), masksize);
+
+    switch (mode) {
+    case NUMA::MPOL_DEFAULT:
+        break;
+    case NUMA::MPOL_PREFERRED:
+        break;
+    case NUMA::MPOL_BIND:
+        break;
+    case NUMA::MPOL_INTERLEAVE:
+        break;
+    case NUMA::MPOL_LOCAL:
+        break;
+    default:
+        return -EINVAL;
+    }
+    sim_policy.mode() = static_cast<NUMA::mode>(mode);
+
+    if (flags & ~(NUMA::MPOL_MF_STRICT |
+                  NUMA::MPOL_MF_MOVE |
+                  NUMA::MPOL_MF_MOVE_ALL))
+        return -EINVAL;
+    sim_policy.flags() = flags;
+
+    return p->movePages(addr, len, sim_policy);
+}
+
+SyscallReturn
+getMemPolicyFunc(SyscallDesc* desc, ThreadContext* tc,
+                 Addr mode, Addr nodemask, uint64_t maxnode,
+                 Addr vaddr, uint64_t flags)
+{
+    int err;
+    NUMA::MemPolicy sim_policy;
+    auto p = tc->getProcessPtr();
+
+    const size_t masksize = (maxnode / 8) + (maxnode % 8 ? 1 : 0);
+
+    if (flags == 0 && vaddr != 0)
+        return -EINVAL;
+
+    if ((flags & NUMA::MPOL_F_MEMS_ALLOWED) &&
+        (flags & (NUMA::MPOL_F_NODE | NUMA::MPOL_F_ADDR)))
+        return -EINVAL;
+
+    if (maxnode >= NUMA::MAXNUMANODES)
+        return -EINVAL;
+
+    if (nodemask != 0)
+        tc->getVirtProxy().readBlob(nodemask, sim_policy.mask(), masksize);
+    if (mode != 0)
+        tc->getVirtProxy().readBlob(mode, &sim_policy.mode(), sizeof(int));
+
+    sim_policy.flags() = flags;
+
+    if ((err = p->getMemPolicy(vaddr, 1, sim_policy)) != 0)
+        return err;
+
+    if (mode != 0)
+        tc->getVirtProxy().writeBlob(mode, &sim_policy.mode(), sizeof(int));
+    if (nodemask != 0)
+        tc->getVirtProxy().writeBlob(nodemask, sim_policy.mask(), masksize);
+
+    return 0;
+}
 
 const char *hostname = "m5.eecs.umich.edu";
 

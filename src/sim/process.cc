@@ -63,6 +63,7 @@
 #include "sim/emul_driver.hh"
 #include "sim/fd_array.hh"
 #include "sim/fd_entry.hh"
+#include "sim/numa.hh"
 #include "sim/redirect_path.hh"
 #include "sim/syscall_desc.hh"
 #include "sim/system.hh"
@@ -111,7 +112,18 @@ normalize(std::string& directory)
 
 Process::Process(ProcessParams *params, EmulationPageTable *pTable,
                  ::Loader::ObjectFile *obj_file)
-    : SimObject(params), system(params->system),
+    : SimObject(params),
+      mempolicy(
+          // Allow all numa nodes
+          NUMA::Bitmask(0, NUMA::get_num_nodes(*(params->system))-1),
+          // Allocate on first memory available.
+          // On linux this policy is MPOL_LOCAL. See NUMA.hh
+          NUMA::MPOL_PREFERRED,
+          // Unused because this is used when moving pages.
+          NUMA::MPOL_MF_STRICT),
+      allowed_nodeset(0, NUMA::get_num_nodes(*(params->system))-1),
+      interleave_node(0),
+      system(params->system),
       useArchPT(params->useArchPT),
       kvmInSE(params->kvmInSE),
       useForClone(false),
@@ -315,14 +327,242 @@ Process::drain()
     return DrainState::Drained;
 }
 
-void
-Process::allocateMem(Addr vaddr, int64_t size, bool clobber)
+// local function for computing available memory from a set of nodes.
+size_t available(const NUMAMemPool& pmem, const NUMA::Bitmask& b)
 {
-    int npages = divCeil(size, (int64_t)system->getPageBytes());
-    Addr paddr = system->allocPhysPages(npages);
-    pTable->map(vaddr, paddr, size,
-                clobber ? EmulationPageTable::Clobber :
-                          EmulationPageTable::MappingFlags(0));
+    size_t tot = 0;
+    for (long i = 0; i < pmem.get_num_nodes(); i++) {
+        if (b.isbitset(i))
+            tot += pmem.available(i);
+    }
+    return tot;
+}
+
+void
+Process::allocateMem(Addr vaddr, int64_t size, bool clobber,
+                     NUMA::MemPolicy const* policy)
+{
+    const Addr page_size = pTable->getPageSize();
+    const Addr start = roundDown(vaddr, page_size);
+    const Addr end = roundUp(vaddr + size, page_size);
+    if (policy == NULL)
+
+        policy = &mempolicy;
+    int err;
+    NUMA::Bitmask others =
+        NUMA::Bitmask(NUMA::get_num_nodes(*system)) & (~policy->nodeset());
+    long node = (policy->mode() == NUMA::MPOL_INTERLEAVE) ?
+        interleave_node : policy->nodeset().first();
+
+    NUMAMemPool& pmem = system->getMemoryPool();
+    Addr paddr;
+    uint64_t flags = clobber ?
+        EmulationPageTable::Clobber :
+        EmulationPageTable::MappingFlags(0);
+    EmulationPageTable::Entry::set_numa_mode(flags, policy->mode());
+
+    for (vaddr = start; vaddr < end; vaddr += page_size) {
+        while ((err = pmem.allocate(1, paddr, node)) == ENOMEM) {
+            // Maybe some memory is left but not in selected nodes.
+            if (available(pmem, policy->nodeset()) == 0){
+                // If we can select from other nodes,
+                // and they have memory, do it.
+                if (policy->mode() == NUMA::MPOL_PREFERRED &&
+                    pmem.available() != 0)
+                    if (!others.isbitset(node)) // Switch to other nodes
+                        node = others.next(node);
+                    else { // We are already on other nodes
+                        node = others.next(node);
+                        if (node == others.first()) // break loop
+                            fatal("Out of m5 memory.");
+                    }
+                // else panic
+                else
+                  fatal("Out of m5 memory.");
+            }
+            // There is memory left on some nodes,
+            // then try the next one in policy.
+            // ok for DEFAULT, LOCAL, INTERLEAVE and BIND policies.
+            else {
+                node = policy->nodeset().next(node);
+            }
+        }
+        // Unexpected error occures ?
+        if (err != 0)
+            fatal("Allocation of physical memory failed.");
+
+        // Map obtained page.
+        pTable->map(vaddr, paddr, page_size, flags);
+
+        // If policy is INTERLEAVE, use next node for next page.
+        if (policy->mode() == NUMA::MPOL_INTERLEAVE)
+            node = policy->nodeset().next(node);
+    }
+    if (policy->mode() == NUMA::MPOL_INTERLEAVE)
+        interleave_node = node;
+}
+
+int
+Process::movePages(Addr vaddr,
+                   const int64_t size,
+                   const NUMA::MemPolicy& mempolicy)
+{
+    const Addr page_size = pTable->getPageSize();
+    Addr start = roundDown(vaddr, page_size);
+    const Addr end = roundUp(vaddr + size, page_size);
+    NUMA::Bitmask system_nodes =
+        NUMA::Bitmask(0, NUMA::get_num_nodes(*system) - 1);
+
+    // Check if nodeset in mask is valid
+    if ((mempolicy.nodeset() & system_nodes).iszero() ||
+        !(mempolicy.nodeset() & ~system_nodes).iszero()) {
+        warn("mbind nodeset out of system nodeset.");
+        return -EFAULT;
+    }
+
+    // Check that vaddr + size does not overflow
+    if (end < start){
+        warn("mbind size too large.");
+        return -EINVAL;
+    }
+
+    // Ensure that empy nodeset is provided with default policy
+    if (mempolicy.mode() == NUMA::MPOL_DEFAULT &&
+        !mempolicy.nodeset().iszero()) {
+        warn("mbind policy default requires a empty nodeset.");
+        return -EINVAL;
+    }
+
+    // Ensure that BIND/INTERLEAVE policies are provided with a non empty
+    // nodeset
+    if ((mempolicy.mode() == NUMA::MPOL_BIND ||
+         mempolicy.mode() == NUMA::MPOL_INTERLEAVE) &&
+        mempolicy.nodeset().iszero()) {
+        warn("mbind policy BIND/INTERLEAVE requires a set nodeset.");
+        return -EINVAL;
+    }
+
+    Addr paddr, old_paddr;
+    uint64_t flags = 0;
+    const EmulationPageTable::Entry *pe;
+    int err = 0;
+    NUMAMemPool& pmem = system->getMemoryPool();
+    enum NUMA::mode mode = mempolicy.mode();
+    NUMA::Bitmask nodeset = NUMA::Bitmask(mempolicy.nodeset());
+
+    // If policy is default, then use the process nodeset.
+    if (mode == NUMA::MPOL_DEFAULT) {
+        mode = this->mempolicy.mode();
+        nodeset.copy_from(this->mempolicy.nodeset());
+    }
+
+    NUMA::Bitmask others = system_nodes & (~nodeset);
+    long target_node = nodeset.first();
+    if (mode == NUMA::MPOL_INTERLEAVE)
+        target_node = nodeset.next(interleave_node);
+
+    // for each contiguous page
+    for (vaddr = start; vaddr < end; vaddr += page_size) {
+        if ((pe = pTable->lookup(vaddr)) == NULL) {
+            // Page may not be in page table yet.
+            // After mmap, if movepages is invoked() the pagefault handler
+            // might not be. Then allocate (physically) unallocated region
+            // with mempolicy.
+
+            do {
+                vaddr += page_size;
+            } while (vaddr < end && (pe = pTable->lookup(vaddr)) == NULL);
+            allocateMem(start, vaddr-start, true, &mempolicy);
+            start = vaddr;
+            continue;
+        }
+
+        // The page is already allocated, then migrate it.
+        // 1. Allocate replacement physical page.
+        // 2. Unmap the current mapping in the page table.
+        // 3. Remap vaddr to new physical memory in the page table.
+        // 4. Free old physical memory.
+
+        // 1. Allocate replacement physical page.
+        // If no memory is available we may use another node when mempolicy
+        // allows it.
+        while ((err = pmem.allocate(1, paddr, target_node)) == ENOMEM){
+            // No need to lookup this node anymore because it is out
+            // of memory.
+            if (others.isbitset(target_node))
+                others.clear(target_node);
+            if (nodeset.isbitset(target_node))
+                nodeset.clear(target_node);
+
+            // Maybe some memory is left in selected nodes.
+            if (available(pmem, nodeset) > 0)
+                target_node = nodeset.next(target_node);
+            // Maybe we are allowed to use other nodes.
+            else if (mode == NUMA::MPOL_PREFERRED &&
+                     available(pmem, others) > 0)
+                target_node = others.next(target_node);
+            // else no memory available for policy.
+            else
+                target_node = -1;
+
+            // No next node ?
+            if (target_node == -1)
+                return -ENOMEM;
+            else
+                continue;
+        }
+
+        // 2. Unmap the current mapping in the page table.
+        old_paddr = pe->paddr;
+        flags = pe->flags;
+        pTable->unmap(vaddr, page_size);
+
+        // 3. Remap to new physical memory.
+        EmulationPageTable::Entry::set_numa_mode(flags, mode);
+        pTable->map(vaddr, paddr, page_size, flags);
+
+        // 4. Free old mapping
+        pmem.free(1, old_paddr);
+
+        // If interleave policy, move to next node.
+        if (mode == NUMA::MPOL_INTERLEAVE)
+            target_node = nodeset.next(target_node);
+    }
+    return 0; // everything went ok.
+}
+
+int
+Process::getMemPolicy(Addr vaddr, int64_t size, NUMA::MemPolicy& mempolicy)
+{
+    if (mempolicy.flags() == 0) {
+        mempolicy.set(this->mempolicy);
+    } else if (mempolicy.flags() & NUMA::MPOL_F_MEMS_ALLOWED) {
+        mempolicy.nodeset().copy_from(allowed_nodeset);
+    } else if (mempolicy.flags() & NUMA::MPOL_F_ADDR) {
+        NUMA::Bitmask pe_nodeset;
+        int nid;
+        const NUMAMemPool& pmem = system->getMemoryPool();
+        const EmulationPageTable::Entry *pe = pTable->lookup(vaddr);
+
+        if (pe == NULL)
+            return -EFAULT;
+        if ((nid = pmem.locate(pe->paddr)) == -1)
+            return -EFAULT;
+
+        mempolicy.mode() = pe->get_numa_mode();
+        if (mempolicy.flags() & NUMA::MPOL_F_NODE){
+            mempolicy.nodeset().zero();
+            mempolicy.nodeset().set(nid);
+        }
+        else
+            mempolicy.nodeset().copy_from(this->mempolicy.nodeset());
+    } else if (mempolicy.flags() & NUMA::MPOL_F_NODE) {
+        if (this->mempolicy.mode() == NUMA::MPOL_INTERLEAVE) {
+            mempolicy.mode() = static_cast<NUMA::mode>(interleave_node);
+        }
+    }
+
+    return 0;
 }
 
 void
@@ -382,9 +622,10 @@ Process::unserialize(CheckpointIn &cp)
 bool
 Process::map(Addr vaddr, Addr paddr, int size, bool cacheable)
 {
-    pTable->map(vaddr, paddr, size,
-                cacheable ? EmulationPageTable::MappingFlags(0) :
-                            EmulationPageTable::Uncacheable);
+    uint64_t flags = cacheable ? EmulationPageTable::MappingFlags(0) :
+        EmulationPageTable::Uncacheable;
+    EmulationPageTable::Entry::set_numa_mode(flags, mempolicy.mode());
+    pTable->map(vaddr, paddr, size, flags);
     return true;
 }
 

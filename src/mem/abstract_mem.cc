@@ -137,6 +137,10 @@ AbstractMemory::MemStats::MemStats(AbstractMemory &_mem)
 {
 }
 
+int AbstractMemory::NUMANodeIndex() const {
+    return _system->getPhysMem().NUMANodeIndex(*this);
+}
+
 void
 AbstractMemory::MemStats::regStats()
 {

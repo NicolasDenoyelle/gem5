@@ -1060,3 +1060,30 @@ TEST(AddrRangeTest, RangeSizeConstruction){
     EXPECT_EQ(0x5, r.start());
     EXPECT_EQ(0xA, r.end());
 }
+
+TEST(AddrRangeTest, RangeSplitAppend){
+    AddrRange r = RangeSize(0x5, 5);
+                AddrRange lhs, rhs;
+
+                // split
+                r.split(2, lhs, rhs);
+
+                // check sizes
+    EXPECT_EQ(2, lhs.size());
+                EXPECT_EQ(3, rhs.size());
+
+                // check bounds
+                EXPECT_EQ(r.start(), lhs.start());
+                EXPECT_EQ(lhs.end(), rhs.start());
+                EXPECT_EQ(r.end(), rhs.end());
+
+                // append
+                EXPECT_TRUE(lhs.append(rhs)); // Works
+
+                // Check two-way inclusion.
+                EXPECT_TRUE(lhs.isSubset(r));
+                EXPECT_TRUE(r.isSubset(lhs));
+
+                // Check equality
+                EXPECT_TRUE(r == lhs);
+}

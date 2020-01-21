@@ -61,6 +61,7 @@
 #include "mem/port_proxy.hh"
 #include "params/System.hh"
 #include "sim/futex_map.hh"
+#include "sim/mem_pool.hh"
 #include "sim/redirect_path.hh"
 #include "sim/se_signal.hh"
 #include "sim/sim_object.hh"
@@ -315,7 +316,10 @@ class System : public SimObject, public PCEventScope
     bool schedule(PCEvent *event) override;
     bool remove(PCEvent *event) override;
 
-    Addr pagePtr;
+    // Physical memory allocator.
+    NUMAMemPool memoryPool;
+    NUMAMemPool& getMemoryPool() { return memoryPool; }
+    const NUMAMemPool& getMemoryPool() const { return memoryPool; }
 
     uint64_t init_param;
 

@@ -308,6 +308,12 @@ class AbstractMemory : public ClockedObject
     bool isInAddrMap() const { return inAddrMap; }
 
     /**
+     * Returns index in system physical memory if this memory is a system
+     * physical memory, else -1.
+     */
+    int NUMANodeIndex() const;
+
+    /**
      * When shadow memories are in use, KVM may want to make one or the other,
      * but cannot map both into the guest address space.
      *

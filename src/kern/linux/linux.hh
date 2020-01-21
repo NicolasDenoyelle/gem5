@@ -34,8 +34,8 @@
 #include "base/random.hh"
 #include "base/types.hh"
 #include "kern/operatingsystem.hh"
-#include "sim/process.hh"
 
+class Process;
 class ThreadContext;
 
 ///

@@ -101,6 +101,11 @@ def addNoISAOptions(parser):
     parser.add_option("--mem-type", type="choice", default="DDR3_1600_8x8",
                       choices=ObjectList.mem_list.get_names(),
                       help = "type of memory to use")
+    parser.add_option("--add-mem", type=str, default=[],
+                      help = "Additional memory to use. Can be either a memory"
+                      "type or a python dictionary: { 'type': <mem type> "
+                      "(, 'size': <mem size>) (, 'channels': <num channels>) "
+                      "(, 'ranks': <num ranks>)}", action='append')
     parser.add_option("--mem-channels", type="int", default=1,
                       help = "number of memory channels")
     parser.add_option("--mem-ranks", type="int", default=None,

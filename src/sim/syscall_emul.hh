@@ -1766,6 +1766,20 @@ mmapFunc(SyscallDesc *desc, ThreadContext *tc,
     return start;
 }
 
+/// Target mbind() handler.
+/// This is not OS specific, though it is a linux system call.
+/// Indeed, mapping between physical memories and virtual addresses
+/// is a gem5 internal, it can be done without OS help.
+SyscallReturn mbindFunc(SyscallDesc *desc, ThreadContext *tc,
+                        Addr addr, uint64_t len, int mode,
+                        Addr nodemask, uint64_t maxnode, int flags);
+
+/// Implementation of get_mempolicy syscall emulation.
+/// This is not OS specific, see mbindFunc().
+SyscallReturn getMemPolicyFunc(SyscallDesc *desc, ThreadContext *tc,
+                               Addr mode, Addr nodemask, uint64_t maxnode,
+                               Addr vaddr, uint64_t flags);
+
 template <class OS>
 SyscallReturn
 pread64Func(SyscallDesc *desc, ThreadContext *tc,

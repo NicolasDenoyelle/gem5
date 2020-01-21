@@ -184,6 +184,12 @@ class PhysicalMemory : public Serializable
     bool isMemAddr(Addr addr) const;
 
     /**
+     * Returns index in system physical memory if this memory is a system
+     * physical memory, else -1.
+     */
+    int NUMANodeIndex(const AbstractMemory &mem) const;
+
+    /**
      * Get the memory ranges for all memories that are to be reported
      * to the configuration table. The ranges are merged before they
      * are returned such that any interleaved ranges appear as a

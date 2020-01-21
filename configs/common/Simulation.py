@@ -92,7 +92,6 @@ def setCPUClass(options):
     if test_mem_mode == 'atomic' and options.ruby:
         warn("Memory mode will be changed to atomic_noncaching")
         test_mem_mode = 'atomic_noncaching'
-
     return (TmpClass, test_mem_mode, CPUClass)
 
 def setMemClass(options):
