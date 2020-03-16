@@ -46,7 +46,6 @@ SimObject('CommMonitor.py')
 Source('comm_monitor.cc')
 
 SimObject('AbstractMemory.py')
-SimObject('RecordMemory.py')
 SimObject('AddrMapper.py')
 SimObject('Bridge.py')
 SimObject('DRAMCtrl.py')

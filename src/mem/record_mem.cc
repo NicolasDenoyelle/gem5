@@ -7,6 +7,19 @@ RecordMemory* RecordMemoryParams::create()
 }
 
 RecordMemory::RecordMemory(const RecordMemoryParams* p) :
-    AbstractMemory(p),
-    slave_port(name() + ".port", *this),
-    master_port(name() + ".port", *this) {}
+    BaseXBar(p) {}
+
+PortID RecordMemory::findPort(AddrRange addr_range)
+{
+    auto i = portMap.contains(addr_range);
+    if (i != portMap.end())
+        return i->second;
+
+    fatal("Unable to find destination for %s on %s\n", addr_range.to_string(),
+          name());
+}
+
+PortID RecordMemory::findPort(Addr addr)
+{
+    return findPort(RangeSize(addr, 1));
+}

@@ -6,11 +6,12 @@
 #ifndef __MEM_RECORD_MEMORY_HH__
 #define __MEM_RECORD_MEMORY_HH__
 
-#include <list>
+#include <vector>
 
-#include "mem/abstract_mem.hh"
+#include "base/addr_range_map.hh"
 #include "mem/port.hh"
 #include "params/RecordMemory.hh"
+#include "sim/sim_object.hh"
 
 /**
  * The record memory is a basic single-ported memory controller with
@@ -18,101 +19,26 @@
  *
  * @sa  \ref gem5MemorySystem "gem5 Memory System"
  */
-class RecordMemory : public AbstractMemory
+class RecordMemory: public SimObject
 {
   private:
-    class MemorySlavePort : public SlavePort
-    {
-      private:
-        RecordMemory& memory;
+    std::vector<SlavePort*> slavePorts;
+    std::vector<MasterPort*> masterPorts;
+    AddrRangeMap<PortID, 3> portMap;
 
-      public:
-        MemorySlavePort(const std::string& _name, RecordMemory& _memory):
-            SlavePort(_name, &_memory), memory(_memory){}
-
-      protected:
-        // Required from protocol/atomic.hh: AtomicResponseProtocol
-        Tick recvAtomic(PacketPtr pkt) override
-        {
-            return memory.recvAtomic(pkt);
-        }
-
-        // Required from protocol/atomic.hh: AtomicResponseProtocol
-        Tick recvAtomicBackdoor(
-            PacketPtr pkt, MemBackdoorPtr &_backdoor) override
-        {
-            return memory.recvAtomicBackdoor(pkt, _backdoor);
-        }
-
-        // Required from protocol/functional.hh: FunctionalResponseProtocol
-        void recvFunctional(PacketPtr pkt) override
-        {
-            memory.recvFunctional(pkt);
-        }
-
-        // Required from protocol/timing.hh: TimingResponseProtocol
-        bool recvTimingReq(PacketPtr pkt) override {
-            return memory.recvTimingReq(pkt);
-        }
-
-        // Required from protocol/timing.hh: TimingResponseProtocol
-        void recvRespRetry() override  {
-            memory.recvRespRetry();
-        }
-
-        // Required from port.hh: SlavePort
-        AddrRangeList getAddrRanges() const override {
-            AddrRangeList ranges;
-            ranges.push_back(memory.getAddrRange());
-            return ranges;
-        }
-    };
-
-    MemorySlavePort slave_port;
-
-    class MemoryMasterPort : public MasterPort
-    {
-      private:
-        RecordMemory& memory;
-
-      public:
-        MemoryMasterPort(const std::string& _name, RecordMemory& _memory):
-            MasterPort(_name, &_memory), memory(_memory){}
-
-      protected:
-        // Required from protocol/timing.hh: AtomicRequestProtocol
-        bool recvTimingResp(PacketPtr pkt) override {
-            return memory.recvTimingResp(pkt);
-        }
-
-        // Required from protocol/timing.hh: AtomicRequestProtocol
-
-        void recvReqRetry() override {
-            memory.recvReqRetry();
-        }
-
-        // Required from protocol/timing.hh: AtomicRequestProtocol
-        void recvRetrySnoopResp() override {
-            memory.recvReqRetry();
-        }
-    };
-
-    MemoryMasterPort master_port;
+    /**
+     * Find which port connected to this crossbar (if any) should be
+     * given a packet with this address range.
+     *
+     * @param addr_range Address range to find port for.
+     * @return id of port that the packet should be sent out of.
+     */
+    PortID findPort(AddrRange addr_range);
+    PortID findPort(Addr addr);
 
   public:
     RecordMemory(const RecordMemoryParams *p);
 
-  protected:
-    // Slave port implementation
-    Tick recvAtomic(PacketPtr pkt);
-    Tick recvAtomicBackdoor(PacketPtr pkt, MemBackdoorPtr &_backdoor);
-    void recvFunctional(PacketPtr pkt);
-    bool recvTimingReq(PacketPtr pkt);
-    void recvRespRetry();
-    // Master port implementation
-    bool recvTimingResp(PacketPtr pkt);
-    void recvReqRetry();
-    void recvRetrySnoopResp();
 };
 
 #endif //__MEM_RECORD_MEMORY_HH__
