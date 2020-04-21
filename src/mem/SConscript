@@ -45,6 +45,9 @@ Import('*')
 SimObject('CommMonitor.py')
 Source('comm_monitor.cc')
 
+SimObject('MemTrace.py')
+Source('memtrace.cc')
+
 SimObject('AbstractMemory.py')
 SimObject('AddrMapper.py')
 SimObject('Bridge.py')
@@ -106,6 +109,7 @@ CompoundFlag('XBar', ['BaseXBar', 'CoherentXBar', 'NoncoherentXBar',
 
 DebugFlag('Bridge')
 DebugFlag('CommMonitor')
+DebugFlag('MemTrace')
 DebugFlag('DRAM')
 DebugFlag('DRAMPower')
 DebugFlag('DRAMState')
