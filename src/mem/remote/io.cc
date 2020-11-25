@@ -4,32 +4,73 @@
 
 #include "io.hh"
 
-#define SOCK_TYPE SOCK_SEQPACKET
+#define SOCK_TYPE SOCK_STREAM
 
-Socket::Socket(const pid_t uid) {
-    sockfd = -1;
+Socket::Socket(const pid_t uid): snd_ind(0), sockfd(-1) {
+    bzero(&snd_buffer, sizeof(snd_buffer));
     bzero(&sockaddr, sizeof(sockaddr));
     sockaddr.sun_family = AF_UNIX;
     snprintf(sockaddr.sun_path, sizeof(sockaddr.sun_path), "%d", uid);
 }
 
 Socket::~Socket(){
+    flush();
     close(sockfd);
     unlink(sockaddr.sun_path);
 }
 
-ssize_t Socket::sendMsg(const m5Message& msg) const {
-    ssize_t len = msg.len();
-    char bytes[len+1];
+ssize_t Socket::flush(){
+    ssize_t w;
+    size_t tot = 0;
 
-    bzero(bytes, len+1);
-    msg.copyBytes(bytes);
-    fprintf(stderr, "send %s\n", bytes);
-    len = write(sockfd, bytes, len);
+    while (tot < snd_ind) {
+        if ((w = write(sockfd, snd_buffer+tot, snd_ind-tot)) < 0)
+            return w;
+        tot += w;
+    }
+    snd_ind = 0;
+    return tot;
+}
 
-    if (len == -1)
-        perror("write");
+ssize_t Socket::sendMsg(const m5Message& msg) {
+    ssize_t err, len = msg.len();
+
+    if ((snd_ind + len) >= sizeof(snd_buffer) && (err = flush()) < 0)
+        return err;
+
+    msg.copyBytes(snd_buffer + snd_ind);
+    snd_ind += len;
     return len;
+}
+
+ssize_t Socket::recvMsg(void* out, const size_t max_len, bool block) const {
+    ssize_t err;
+    uint8_t id;
+    uint64_t len;
+
+    if (block)
+        err = read(sockfd, &id, sizeof(id));
+    else
+        err = recv(sockfd, &id, sizeof(id), MSG_DONTWAIT);
+    if (err != sizeof(id))
+        return err;
+    if (err <= 0)
+        return err;
+    err = read(sockfd, &len, sizeof(len));
+    if (err != sizeof(len))
+        return err;
+    if (max_len < len)
+        return -1;
+    bzero((char*)out, len);
+    *(uint8_t*) out = id;
+    *(uint64_t*) ((char*)out + sizeof(id)) = len;
+    err = sizeof(id) + sizeof(len);
+    err = read(sockfd, (char*)out + err, len - err);
+
+    if (err < 0)
+        return err;
+
+    return (ssize_t) m5Message::uid(out);
 }
 
 ssize_t Socket::recvMsg(m5Message& msg) const {
@@ -38,23 +79,9 @@ ssize_t Socket::recvMsg(m5Message& msg) const {
 
     bzero(bytes, len+1);
     len = read(sockfd, bytes, len);
-    fprintf(stderr, "receive %s\n", bytes);
     if (len > 0)
         msg.fromBytes(bytes);
     return len;
-}
-
-bool Socket::isConnected() const {
-    struct pollfd pollfd = {
-        .fd = sockfd,
-        .events = 0,
-        .revents = 0
-    };
-
-    if (poll(&pollfd, 1, 100) < 0)
-        return false;
-
-    return (pollfd.revents & (POLLHUP | POLLERR | POLLNVAL)) == 0;
 }
 
 Server::Server(const pid_t uid): Socket(uid) {

@@ -1,8 +1,10 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+
 #include "numa.h"
 
 int
@@ -18,6 +20,10 @@ test_mbind(const size_t size)
     buf = mmap(NULL, size, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     if (buf == NULL) { perror("mmap"); return -1; }
+
+                // print buf address
+                printf("Write 0x%p [%lu]B\n", buf, size);
+                memset(buf, 0, size);
 
     // Bind for each node
     for (long i=0; i<NUMA_MAXNODE; i++) {
@@ -39,6 +45,8 @@ test_mbind(const size_t size)
                 out = -i-1;
                 goto exit;
             }
+            printf("Write 0x%p [%lu]B\n", buf, size);
+            memset(buf, 0, size);
         }
     }
 
@@ -57,7 +65,7 @@ int
 main()
 {
     const size_t numa_page_size = sysconf(_SC_PAGESIZE);
-    const size_t size = numa_page_size * 32;
+    const size_t size = numa_page_size * 2;
 
     int err = test_mbind(size);
 

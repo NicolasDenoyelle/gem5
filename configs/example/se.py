@@ -181,6 +181,7 @@ system = System(cpu = [CPUClass(cpu_id=i) for i in range(np)],
                 mem_mode = test_mem_mode,
                 mem_ranges = ranges,
                 cache_line_size = options.cacheline_size,
+                server_id = options.server_id,
                 workload = NULL)
 
 if numThreads > 1:

@@ -59,6 +59,7 @@
 #include "mem/physical.hh"
 #include "mem/port.hh"
 #include "mem/port_proxy.hh"
+#include "mem/remote/io.hh"
 #include "params/System.hh"
 #include "sim/futex_map.hh"
 #include "sim/mem_pool.hh"
@@ -321,6 +322,13 @@ class System : public SimObject, public PCEventScope
     NUMAMemPool& getMemoryPool() { return memoryPool; }
     const NUMAMemPool& getMemoryPool() const { return memoryPool; }
 
+    Server *server;
+  private:
+    int server_poll_ticks;
+    EventFunctionWrapper server_poll_event;
+    void processServerEvent();
+
+  public:
     uint64_t init_param;
 
     /** Port to physical memory used for writing object files into ram at

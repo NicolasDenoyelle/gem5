@@ -52,7 +52,6 @@
 #include "sim/clocked_object.hh"
 #include "sim/stats.hh"
 
-
 class System;
 
 /**
@@ -122,6 +121,9 @@ class AbstractMemory : public ClockedObject
 
     // Should KVM map this memory for the guest
     const bool kvmMap;
+
+    // The NUMA node index of the memory.
+    unsigned NUMA_index;
 
     std::list<LockedAddr> lockedAddrList;
 
@@ -195,6 +197,8 @@ class AbstractMemory : public ClockedObject
 
 
   private:
+    // Global memory counter.
+    static unsigned NUMA_idx;
 
     // Prevent copying
     AbstractMemory(const AbstractMemory&);
@@ -202,12 +206,16 @@ class AbstractMemory : public ClockedObject
     // Prevent assignment
     AbstractMemory& operator=(const AbstractMemory&);
 
+    void sendAccess(PacketPtr pkt) const;
+
   public:
 
     typedef AbstractMemoryParams Params;
 
     AbstractMemory(const Params* p);
     virtual ~AbstractMemory() {}
+
+    inline unsigned NUMANodeIndex() const { return NUMA_index; }
 
     void initState() override;
 
@@ -306,12 +314,6 @@ class AbstractMemory : public ClockedObject
      * @return if this memory is part of the address map
      */
     bool isInAddrMap() const { return inAddrMap; }
-
-    /**
-     * Returns index in system physical memory if this memory is a system
-     * physical memory, else -1.
-     */
-    int NUMANodeIndex() const;
 
     /**
      * When shadow memories are in use, KVM may want to make one or the other,

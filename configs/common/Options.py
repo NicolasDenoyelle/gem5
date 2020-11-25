@@ -374,7 +374,9 @@ def addCommonOptions(parser):
         "that are present under any of the roots. If not given, dump all "
         "stats. "
     )
-
+    parser.add_option("--server-id", type=int, default=-1,
+                      help = "Server socket identifier to hook up a client.",
+                      action='store')
 
 def addSEOptions(parser):
     # Benchmark options

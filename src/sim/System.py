@@ -132,3 +132,7 @@ class System(SimObject):
 
     if buildEnv['USE_KVM']:
         kvm_vm = Param.KvmVM(NULL, 'KVM VM (i.e., shared memory domain)')
+
+    server_id = Param.Int(-1, 'If set to some identifier, ' +
+                          'this spawn a server and wait for ' +
+                          'client connection.')

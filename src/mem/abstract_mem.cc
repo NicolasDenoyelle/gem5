@@ -50,9 +50,13 @@
 #include "debug/LLSC.hh"
 #include "debug/MemoryAccess.hh"
 #include "mem/packet_access.hh"
+#include "mem/remote/io.hh"
+#include "mem/remote/message.hh"
 #include "sim/system.hh"
 
 using namespace std;
+
+unsigned AbstractMemory::NUMA_idx = 0;
 
 AbstractMemory::AbstractMemory(const Params *p) :
     ClockedObject(p), range(params()->range), pmemAddr(NULL),
@@ -60,7 +64,7 @@ AbstractMemory::AbstractMemory(const Params *p) :
              (MemBackdoor::Flags)(MemBackdoor::Readable |
                                   MemBackdoor::Writeable)),
     confTableReported(p->conf_table_reported), inAddrMap(p->in_addr_map),
-    kvmMap(p->kvm_map), _system(NULL),
+    kvmMap(p->kvm_map), NUMA_index(NUMA_idx++), _system(NULL),
     stats(*this)
 {
     panic_if(!range.valid() || !range.size(),
@@ -135,10 +139,6 @@ AbstractMemory::MemStats::MemStats(AbstractMemory &_mem)
     bwTotal(this, "bw_total",
             "Total bandwidth to/from this memory (bytes/s)")
 {
-}
-
-int AbstractMemory::NUMANodeIndex() const {
-    return _system->getPhysMem().NUMANodeIndex(*this);
 }
 
 void
@@ -373,6 +373,20 @@ tracePacket(System *sys, const char *label, PacketPtr pkt)
 #   define TRACE_PACKET(A)
 #endif
 
+void AbstractMemory::sendAccess(PacketPtr pkt) const {
+    if (_system->server != NULL && pkt->req->hasVaddr() &&
+        !pkt->req->isInstFetch()) {
+        MemAccess::Type type = pkt->isRead() ?
+            MemAccess::Type::R : pkt->isWrite() ?
+            MemAccess::Type::W : MemAccess::Type::RW;
+        MemAccess msg(type, curTick(), pkt->req->getVaddr(),
+                      NUMANodeIndex(), pkt->req->contextId());
+        inform("[%lu] address: 0x%lx, numa: %u", msg.tick(),
+               msg.address(), msg.numaNode());
+        _system->server->sendMsg(msg);
+    }
+}
+
 void
 AbstractMemory::access(PacketPtr pkt)
 {
@@ -387,6 +401,8 @@ AbstractMemory::access(PacketPtr pkt)
                 pkt->getAddr());
       return;
     }
+
+    sendAccess(pkt);
 
     assert(pkt->getAddrRange().isSubset(range));
 
@@ -481,6 +497,8 @@ AbstractMemory::functionalAccess(PacketPtr pkt)
     assert(pkt->getAddrRange().isSubset(range));
 
     uint8_t *host_addr = toHostAddr(pkt->getAddr());
+
+    sendAccess(pkt);
 
     if (pkt->isRead()) {
         if (pmemAddr) {

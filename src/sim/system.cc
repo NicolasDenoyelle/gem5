@@ -205,6 +205,10 @@ int System::numSystemsRunning = 0;
 System::System(Params *p)
     : SimObject(p), _systemPort("system_port", this),
       multiThread(p->multi_thread),
+      server(NULL),
+      server_poll_ticks(1000000),
+      server_poll_event([this]{processServerEvent();},
+                        std::string("Server poll event callback")),
       init_param(p->init_param),
       physProxy(_systemPort, p->cache_line_size),
       workload(p->workload),
@@ -262,12 +266,18 @@ System::System(Params *p)
         params()->memories[x]->system(this);
 
     memoryPool.init(physmem.getConfAddrRanges());
+
+    if (params()->server_id >= 0){
+        server = new Server(params()->server_id);
+        server->connect_client();
+    }
 }
 
 System::~System()
 {
     for (uint32_t j = 0; j < numWorkIds; j++)
         delete workItemStats[j];
+    delete server;
 }
 
 void
@@ -296,6 +306,23 @@ System::startup()
         }
     }
 #endif
+    if (server != NULL)
+        schedule(server_poll_event, server_poll_ticks);
+}
+
+void
+System::processServerEvent()
+{
+    char bytes[128];
+    MBind mbind_msg;
+    while (server->recvMsg((char*)bytes, sizeof(bytes), false) > 0) {
+        if (m5Message::uid(bytes) == MBind::uid()) {
+            mbind_msg.fromBytes(bytes);
+            inform("Received mbind (@0x%lx [%lu], numa:%lu)",
+                   mbind_msg.addr(), mbind_msg.size(), mbind_msg.nodeset());
+        }
+    }
+    schedule(server_poll_event, server_poll_ticks);
 }
 
 Port &
