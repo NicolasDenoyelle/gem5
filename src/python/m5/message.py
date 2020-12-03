@@ -1,4 +1,18 @@
-# Copyright (c) 2005 The Regents of The University of Michigan
+# Copyright (c) 2017 ARM Limited
+# All rights reserved.
+#
+# The license below extends only to copyright in the software and shall
+# not be construed as granting a license to any other intellectual
+# property including but not limited to intellectual property relating
+# to a hardware implementation of the functionality of the software
+# licensed hereunder.  You may use the software subject to the license
+# terms below provided that you ensure that this notice is replicated
+# unmodified and in its entirety in all distributions of the software,
+# modified or unmodified, in source code or in binary form.
+#
+# Copyright (c) 2006 The Regents of The University of Michigan
+# Copyright (c) 2013 Advanced Micro Devices, Inc.
+# Copyright (c) 2013 Mark D. Hill and David A. Wood
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,38 +39,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
-from __future__ import absolute_import
 
-# Import useful subpackages of M5, but *only* when run as an m5
-# script.  This is mostly to keep backward compatibility with existing
-# scripts while allowing new SCons code to operate properly.
+from _m5.message import *
 
-try:
-    # Try to import a native module
-    import _m5.core
-
-    # Try to grab something from it in case demandimport is being used
-    _m5.core.curTick
-    in_gem5 = True
-except ImportError:
-    # The import failed, we're being called from the build system
-    in_gem5 = False
-
-if in_gem5:
-    from . import SimObject
-    from . import core
-    from . import defines
-    from . import objects
-    from . import params
-    from . import stats
-    from . import message
-    from . import io
-    if defines.buildEnv['USE_SYSTEMC']:
-        from . import systemc
-        from . import tlm
-    from . import util
-
-    from .event import *
-    from .main import main
-    from .simulate import *
-
+__all__ = [ 'MemAccess', 'MBind' ]

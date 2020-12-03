@@ -5,8 +5,8 @@
 #include <ctime>
 #include <iostream>
 
-#include "io.hh"
-#include "message.hh"
+#include "mem/remote/io.hh"
+#include "mem/remote/message.hh"
 
 #define test_assert(code) do {                                               \
         printf("%20s | %-20s ...", __FUNCTION__, #code);                \

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-from gem5 import Buffer
-from gem5.io import Client
-from gem5.message import MemAccess, MBind
+import os
+from m5.io import Buffer, Client
+from m5.message import MemAccess, MBind
+
+print(os.getcwd())
 
 buffer = Buffer(128)
 msg = MemAccess(MemAccess.Type.RW, 232830, 0, 1, 4354353)

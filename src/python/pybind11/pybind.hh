@@ -46,4 +46,7 @@ void pybind_init_debug(pybind11::module &m_native);
 void pybind_init_event(pybind11::module &m_native);
 void pybind_init_stats(pybind11::module &m_native);
 
+void pybind_init_message(pybind11::module &m_native);
+void pybind_init_io(pybind11::module &m_native);
+
 #endif

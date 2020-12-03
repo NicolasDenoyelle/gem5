@@ -1,7 +1,7 @@
 #include <cassert>
 
-#include "io.hh"
-#include "message.hh"
+#include "mem/remote/io.hh"
+#include "mem/remote/message.hh"
 
 int main(void) {
     MemAccess msg = MemAccess(MemAccess::Type::RW, 232830, 0, 1, 4354353);

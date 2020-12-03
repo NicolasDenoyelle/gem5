@@ -1,6 +1,5 @@
 # -*- mode:python -*-
 
 Import('*')
-
 Source('io.cc')
 Source('message.cc')
