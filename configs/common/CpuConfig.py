@@ -48,6 +48,7 @@ def config_etrace(cpu_cls, cpu_list, options):
             # file names. Set the dependency window size equal to the cpu it
             # is attached to.
             cpu.traceListener = m5.objects.ElasticTrace(
+                                traceVirtAddr = True,
                                 instFetchTraceFile = options.inst_trace_file,
                                 dataDepTraceFile = options.data_trace_file,
                                 depWindowSize = 3 * cpu.numROBEntries)

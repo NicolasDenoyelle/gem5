@@ -259,6 +259,8 @@ class ElasticTrace : public ProbeListenerObject
         InstSeqNum instNum;
         /** The type of trace record for the instruction node */
         RecordType type;
+        /* Tick when instruction was in fetch stage. */
+        Tick fetchTick;
         /* Tick when instruction was in execute stage. */
         Tick executeTick;
         /* Tick when instruction was marked ready and sent to commit stage. */

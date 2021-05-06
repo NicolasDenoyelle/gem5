@@ -409,6 +409,7 @@ ElasticTrace::addDepTraceRecord(const DynInstConstPtr& head_inst,
     new_record->pc = head_inst->instAddr();
 
     // Assign the timing information stored in the execution info object
+    new_record->fetchTick = head_inst->fetchTick;
     new_record->executeTick = exec_info_ptr->executeTick;
     new_record->toCommitTick = exec_info_ptr->toCommitTick;
     new_record->commitTick = curTick();
@@ -820,6 +821,8 @@ ElasticTrace::writeDepTrace(uint32_t num_to_write)
 
             // Create a protobuf message for the dependency record
             ProtoMessage::InstDepRecord dep_pkt;
+            dep_pkt.set_latency(temp_ptr->commitTick - temp_ptr->fetchTick);
+            dep_pkt.set_tick(temp_ptr->fetchTick);
             dep_pkt.set_seq_num(temp_ptr->instNum);
             dep_pkt.set_type(temp_ptr->type);
             dep_pkt.set_pc(temp_ptr->pc);

@@ -79,4 +79,6 @@ message InstDepRecord {
   optional uint64 pc = 10;
   optional uint64 v_addr = 11;
   optional uint32 asid = 12;
+  required uint32 latency = 13;
+  required uint64 tick = 14;
 }
