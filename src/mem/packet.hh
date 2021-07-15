@@ -644,6 +644,9 @@ class Packet : public Printable
      */
     void setHasSharers()    { flags.set(HAS_SHARERS); }
     bool hasSharers() const { return flags.isSet(HAS_SHARERS); }
+
+    void setFromMemory()    { req->setFromMemory(); }
+    bool isFromMemory() const { return req->isFromMemory(); }
     //@}
 
     /**

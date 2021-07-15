@@ -413,6 +413,7 @@ class Request
     /** The cause for HTM transaction abort */
     HtmFailureFaultCause _htmAbortCause = HtmFailureFaultCause::INVALID;
 
+    bool _fromMemory;
   public:
 
     /**
@@ -428,7 +429,8 @@ class Request
      * These fields are adequate to perform a request.
      */
     Request(Addr paddr, unsigned size, Flags flags, RequestorID id) :
-        _paddr(paddr), _size(size), _requestorId(id), _time(curTick())
+      _paddr(paddr), _size(size), _requestorId(id), _time(curTick()),
+      _fromMemory(false)
     {
         _flags.set(flags);
         privateFlags.set(VALID_PADDR|VALID_SIZE);
@@ -436,7 +438,7 @@ class Request
 
     Request(Addr vaddr, unsigned size, Flags flags,
             RequestorID id, Addr pc, ContextID cid,
-            AtomicOpFunctorPtr atomic_op=nullptr)
+            AtomicOpFunctorPtr atomic_op=nullptr): _fromMemory(false)
     {
         setVirt(vaddr, size, flags, id, pc, std::move(atomic_op));
         setContext(cid);
@@ -454,6 +456,7 @@ class Request
           _extraData(other._extraData), _contextId(other._contextId),
           _pc(other._pc), _reqInstSeqNum(other._reqInstSeqNum),
           _localAccessor(other._localAccessor),
+          _fromMemory(false),
           translateDelta(other.translateDelta),
           accessDelta(other.accessDelta), depth(other.depth)
     {
@@ -463,6 +466,8 @@ class Request
 
     ~Request() {}
 
+    void setFromMemory() { _fromMemory = true; }
+    bool isFromMemory() const { return _fromMemory; }
     /**
      * Set up Context numbers.
      */

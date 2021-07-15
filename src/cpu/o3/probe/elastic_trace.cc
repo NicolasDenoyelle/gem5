@@ -410,6 +410,7 @@ ElasticTrace::addDepTraceRecord(const DynInstConstPtr& head_inst,
 
     // Assign the timing information stored in the execution info object
     new_record->fetchTick = head_inst->fetchTick;
+    new_record->fromMemory = head_inst->fromMemory;
     new_record->executeTick = exec_info_ptr->executeTick;
     new_record->toCommitTick = exec_info_ptr->toCommitTick;
     new_record->commitTick = curTick();
@@ -795,7 +796,7 @@ ElasticTrace::writeDepTrace(uint32_t num_to_write)
         // track the comp node in the dependency graph. We filter out such
         // nodes but count them and add a weight field to the subsequent node
         // that we do include in the trace.
-        if (!temp_ptr->isComp() || temp_ptr->numDepts != 0) {
+        if ((!temp_ptr->isComp() || temp_ptr->numDepts != 0) && temp_ptr->fromMemory) {
             DPRINTFR(ElasticTrace, "Instruction with seq. num %lli "
                      "is as follows:\n", temp_ptr->instNum);
             if (temp_ptr->isLoad() || temp_ptr->isStore()) {
@@ -822,6 +823,7 @@ ElasticTrace::writeDepTrace(uint32_t num_to_write)
             // Create a protobuf message for the dependency record
             ProtoMessage::InstDepRecord dep_pkt;
             dep_pkt.set_latency(temp_ptr->commitTick - temp_ptr->fetchTick);
+            dep_pkt.set_from_memory(temp_ptr->fromMemory);
             dep_pkt.set_tick(temp_ptr->fetchTick);
             dep_pkt.set_seq_num(temp_ptr->instNum);
             dep_pkt.set_type(temp_ptr->type);

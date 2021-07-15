@@ -72,6 +72,7 @@ SimpleMemory::recvAtomic(PacketPtr pkt)
     panic_if(pkt->cacheResponding(), "Should not see packets where cache "
              "is responding");
 
+    pkt->setFromMemory();
     access(pkt);
     return getLatency();
 }
@@ -91,6 +92,7 @@ SimpleMemory::recvFunctional(PacketPtr pkt)
 {
     pkt->pushLabel(name());
 
+    pkt->setFromMemory();
     functionalAccess(pkt);
 
     bool done = false;

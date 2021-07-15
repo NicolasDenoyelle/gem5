@@ -12,36 +12,36 @@ import packet_pb2
 try:
     import inst_pb2
 except:
-    print "Did not find protobuf inst definitions, attempting to generate"
+    print("Did not find protobuf inst definitions, attempting to generate")
     from subprocess import call
     error = call(['protoc', '--python_out=util', '--proto_path=src/proto',
                   'src/proto/inst.proto'])
     if not error:
-        print "Generated inst proto definitions"
+        print("Generated inst proto definitions")
 
         try:
             import google.protobuf
         except:
-            print "Please install Python protobuf module"
+            print("Please install Python protobuf module")
             exit(-1)
 
         import inst_pb2
     else:
-        print "Failed to import inst proto definitions"
+        print("Failed to import inst proto definitions")
         exit(-1)
 
 try:
     import inst_dep_record_pb2
 except:
-    print "Did not find proto definition, attempting to generate"
+    print("Did not find proto definition, attempting to generate")
     from subprocess import call
     error = call(['protoc', '--python_out=util', '--proto_path=src/proto',
                   'src/proto/inst_dep_record.proto'])
     if not error:
         import inst_dep_record_pb2
-        print "Generated proto definitions for instruction dependency record"
+        print("Generated proto definitions for instruction dependency record")
     else:
-        print "Failed to import proto definitions"
+        print("Failed to import proto definitions")
         exit(-1)
 
 CMDS = {
@@ -189,7 +189,7 @@ INST_TYPE = {
 }
 
 def decode_packets(proto_in, flags=[], cmds=[]):
-    print 'decode packet trace: %s' % args.input
+    print('decode packet trace: %s' % args.input)
 
     # Read the magic number in 4-byte Little Endian
     magic_number = proto_in.read(4)
@@ -229,13 +229,13 @@ def decode_packets(proto_in, flags=[], cmds=[]):
                 continue
             line += '%s %s %s %s ' % (packet.tick, cmd, hex(packet.addr),
                                       packet.size)
-        print '%s' % line
+        print('%s' % line)
 
-    print 'Encountered flags: %s' % str(all_flags)
-    print 'Encountered commands: %s' % str(all_cmds)
+    print('Encountered flags: %s' % str(all_flags))
+    print('Encountered commands: %s' % str(all_cmds))
 
 def decode_insts(proto_in, flags=[]):
-    print 'decode instruction trace: %s' % args.input
+    print('decode instruction trace: %s' % args.input)
     # Read the magic number in 4-byte Little Endian
     magic_number = proto_in.read(4)
 
@@ -269,13 +269,13 @@ def decode_insts(proto_in, flags=[]):
         num_insts += 1
 
 def decode_deps(proto_in, flags=[]):
-    print 'decode dependencies trace: %s' % args.input
+    print('decode dependencies trace: %s' % args.input)
 
     # Read the magic number in 4-byte Little Endian
     magic_number = proto_in.read(4)
 
     if magic_number != "gem5":
-        print "Unrecognized file"
+        print("Unrecognized file")
         exit(-1)
 
     # Add the packet header

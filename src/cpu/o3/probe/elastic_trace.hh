@@ -269,6 +269,8 @@ class ElasticTrace : public ProbeListenerObject
         Tick commitTick;
         /* If instruction was committed, as against squashed. */
         bool commit;
+        /* If instruction is memory instruction that reached main memory. */
+        bool fromMemory;
         /* List of order dependencies. */
         std::list<InstSeqNum> robDepList;
         /* List of physical register RAW dependencies. */
@@ -292,7 +294,7 @@ class ElasticTrace : public ProbeListenerObject
         unsigned size;
         /** Default Constructor */
         TraceInfo()
-          : type(Record::INVALID)
+          : type(Record::INVALID), fromMemory(false)
         { }
         /** Is the record a load */
         bool isLoad() const { return (type == Record::LOAD); }

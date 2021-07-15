@@ -113,6 +113,7 @@ LSQUnit<Impl>::completeDataAccess(PacketPtr pkt)
     LSQSenderState *state = dynamic_cast<LSQSenderState *>(pkt->senderState);
     DynInstPtr inst = state->inst;
 
+    inst->fromMemory = pkt->isFromMemory();
     // hardware transactional memory
     // sanity check
     if (pkt->isHtmTransactional() && !inst->isSquashed()) {
@@ -128,7 +129,7 @@ LSQUnit<Impl>::completeDataAccess(PacketPtr pkt)
         // they cannot tolerate faults
         const HtmCacheFailure htm_rc =
             pkt->getHtmTransactionFailedInCacheRC();
-        if(pkt->isWrite()) {
+        if (pkt->isWrite()) {
             DPRINTF(HtmCpu,
                 "store notification (ignored) of HTM transaction failure "
                 "in cache - addr=0x%lx - rc=%s - htmUid=%d\n",
@@ -570,7 +571,8 @@ LSQUnit<Impl>::checkViolations(typename LoadQueue::iterator& loadIt,
                 }
 
                 // Otherwise, mark the load has a possible load violation
-                // and if we see a snoop before it's commited, we need to squash
+                // and if we see a snoop before it's commited, we need to
+                // squash
                 ld_inst->possibleLoadViolation(true);
                 DPRINTF(LSQUnit, "Found possible load violation at addr: %#x"
                         " between instructions [sn:%lli] and [sn:%lli]\n",

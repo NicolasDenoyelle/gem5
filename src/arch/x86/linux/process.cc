@@ -466,7 +466,11 @@ static SyscallDescTable<X86_64LinuxProcess::SyscallABI> syscallDescs64 = {
     { 214, "epoll_ctl_old" },
     { 215, "epoll_wait_old" },
     { 216, "remap_file_pages" },
+#if defined(SYS_getdents)
+    { 217, "getdents64", getdents64Func },
+#else
     { 217, "getdents64" },
+#endif
     { 218, "set_tid_address", setTidAddressFunc },
     { 219, "restart_syscall" },
     { 220, "semtimedop" },
@@ -728,7 +732,7 @@ static SyscallDescTable<I386LinuxProcess::SyscallABI> syscallDescs32 = {
 #if defined(SYS_getdents)
     { 141, "getdents", getdentsFunc },
 #else
-    { 141, "getdents" },
+    {141, "getdents"},
 #endif
     { 142, "_newselect" },
     { 143, "flock" },
@@ -809,7 +813,11 @@ static SyscallDescTable<I386LinuxProcess::SyscallABI> syscallDescs32 = {
     { 218, "mincore" },
     { 219, "madvise", ignoreFunc },
     { 220, "madvise1" },
+#if defined(SYS_getdents)
+    { 221, "getdents64", getdents64Func },
+#else
     { 221, "getdents64" },
+#endif
     { 222, "fcntl64" },
     { 223, "unused" },
     { 224, "gettid", gettidFunc },
